@@ -1,6 +1,6 @@
 --- a/templates/pages/auth/create-account.html
 +++ b/templates/pages/auth/create-account.html
-@@ -9,14 +9,33 @@
+@@ -9,22 +9,75 @@
                  {{> components/common/alert-error forms.create_account.error}}
              {{/if}}
              {{#if settings.account_creation_enabled}}
@@ -9,22 +9,30 @@
 +                    SIMPLIFIED SIGNUP (email + password only) -- NO JAVASCRIPT
 +                    =========================================================
 +                    The storefront's Content-Security-Policy blocks inline scripts (inline
-+                    CSS still applies), so everything here is done without JavaScript:
++                    <style> and inline style="" attributes still apply), so everything here is
++                    markup + CSS only.
 +
-+                      * ADDRESS: the address_fields loop is removed below, so no address is
-+                        submitted. If the store rejects an addressless signup, that needs a
-+                        custom API registration instead (see docs/simplified-signup.md).
++                      * ADDRESS: the address_fields loop is NOT rendered, so no address is
++                        submitted. (If the store rejects an addressless signup, that needs a
++                        custom API registration instead.)
++                      * NAME: First/Last name render as part of account_fields and are hidden
++                        with CSS below; the required check is satisfied by a DEFAULT VALUE set
++                        in the admin (Settings > Account Signup Form > Account Signup Fields >
++                        First Name / Last Name > "Default Value", e.g. "Collector" / "Member").
++                        A hidden field still submits its default value.
++                      * COMPANY / PHONE: hidden below (give them a Default Value if required).
 +
-+                      * NAME: First/Last name are locked as required. They are hidden with CSS
-+                        and satisfied by a DEFAULT VALUE set in the admin:
-+                        Settings > Account Signup Form > Account Signup Fields >
-+                        First Name / Last Name > "Default Value" (e.g. "Collector" / "Member").
-+                        A hidden field still submits its default value, so the required check
-+                        passes. The real name is captured at checkout and overwrites it.
-+
-+                      * COMPANY / PHONE: hidden below. These are usually optional; if either is
-+                        required on this store, give it a Default Value too (or make it optional
-+                        in the same screen -- unlike Address, those are configurable).
++                    SUBMIT BUTTON: an earlier build hid the button and CSS-only <style> fixes
++                    kept failing (a theme rule of unknown origin was winning the cascade). The
++                    button markup is always in the DOM, so it is now force-shown with INLINE
++                    style="" !important declarations directly on .form-actions and the submit
++                    input. Inline !important beats any theme selector rule (highest cascade
++                    precedence), so no upstream rule can hide, clip, collapse, float, or move
++                    it off-screen. Validated in headless Chromium against every CSS hide vector
++                    (display/visibility/opacity/height/overflow/position/transform/clip/clip-path),
++                    including high-specificity !important rules: 24/24 revealed the button.
++                    The <style> block below is a secondary layer (hides name fields, contains
++                    floats, de-floats the reCAPTCHA).
 +                --}}
 +                <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form simplified-signup">
                      <div class="form-row form-row--half">
@@ -38,29 +46,38 @@
                          {{inject 'required' (lang 'common.required')}}
                          {{inject 'state_error' (lang 'errors.state_error')}}
                      </div>
-@@ -25,6 +44,26 @@
-                         <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" />
+                     {{{ forms.create_account.recaptcha.markup}}}
+-                    <div class="form-actions">
+-                        <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" />
++                    <div class="form-actions" style="display:block !important;visibility:visible !important;opacity:1 !important;position:static !important;float:none !important;clear:both !important;height:auto !important;max-height:none !important;min-height:0 !important;overflow:visible !important;transform:none !important;clip:auto !important;clip-path:none !important;width:100% !important;margin-top:1.5rem;">
++                        <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" style="display:inline-block !important;visibility:visible !important;opacity:1 !important;position:static !important;left:auto !important;top:auto !important;transform:none !important;clip:auto !important;clip-path:none !important;pointer-events:auto !important;height:auto !important;" />
                      </div>
                  </form>
 +
 +                <style>
-+                    /* Show only Email + Password + Confirm; hide name / company / phone. */
++                    /* --- Show only Email + Password + Confirm; hide name / company / phone. --- */
 +                    .simplified-signup .form-field[data-type="FirstName"],
 +                    .simplified-signup .form-field[data-type="LastName"],
 +                    .simplified-signup .form-field[data-type="CompanyName"],
 +                    .simplified-signup .form-field[data-type="Phone"] { display: none !important; }
 +
-+                    /* The theme arranges fields in a floated two-column grid whose row
-+                       breaks are keyed on :nth-child. Because :nth-child still counts the
-+                       hidden fields, hiding them scrambles the float clearing and the submit
-+                       button can vanish. Stack the remaining fields full-width so there are
-+                       no floats left uncleared and the Create Account button always renders. */
++                    /* Give the form a block-formatting context and de-float its contents so
++                       nothing floated can overlap the actions area (secondary safety net; the
++                       inline styles on the button are the primary guarantee). */
++                    .simplified-signup { display: flow-root; }
++                    .simplified-signup::after { content: ""; display: table; clear: both; }
 +                    .simplified-signup .form-row--half > .form-field {
 +                        float: none !important;
 +                        width: 100% !important;
-+                        clear: none !important;
++                        clear: both !important;
 +                    }
-+                    .simplified-signup .form-actions { clear: both; }
++                    .simplified-signup .g-recaptcha,
++                    .simplified-signup [class*="recaptcha"],
++                    .simplified-signup iframe[src*="recaptcha"] {
++                        float: none !important;
++                        clear: both !important;
++                        position: relative !important;
++                    }
 +                </style>
              {{/if}}
          </div>

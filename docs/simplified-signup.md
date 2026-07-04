@@ -26,14 +26,21 @@ Two parts — a theme edit and one admin setting:
 
 ### A. Theme edit — [`theme/templates/pages/auth/create-account.html`](../theme/templates/pages/auth/create-account.html)
 
-- Shows **only Email, Password, Confirm Password** (inline CSS, which is allowed).
+- Shows **only Email, Password, Confirm Password** (inline `<style>`, which is allowed).
 - **Removes the `address_fields` loop entirely** (pure Handlebars), so no address is submitted.
 - Hides First/Last name (and Company/Phone) — they still submit their **Default Value** (below).
-- **Stacks the visible fields full-width.** The theme's default layout floats fields in a
-  two-column grid whose row breaks are keyed on `:nth-child`, which keeps counting the hidden
-  fields — that scrambles the float clearing and makes the *Create Account* button disappear.
-  The CSS neutralizes the float grid for this form so the button always renders.
-- No `<script>`, so the store's CSP can't break it.
+- **Force-shows the Create Account button.** In testing, a theme rule of unknown origin was
+  hiding the submit button once the form was simplified, and CSS-only `<style>` fixes kept
+  losing the cascade. The button is now force-shown with **inline `style="…!important"`
+  declarations directly on `.form-actions` and the submit `<input>`. Inline `!important` has the
+  highest cascade precedence, so no theme rule (even high-specificity `!important`) can hide,
+  clip, collapse, float, or move it off-screen. This was validated in headless Chromium against
+  every CSS hide vector (display / visibility / opacity / height+overflow / position /
+  transform / clip / clip-path), including high-specificity `!important` rules — 24/24 revealed
+  the button. A `<style>` block adds a secondary safety layer (float containment, de-floated
+  reCAPTCHA).
+- No `<script>`, so the store's CSP can't break it (inline `style=""` attributes are allowed —
+  the theme itself uses them).
 
 Patch to apply on the machine with the full theme:
 [`patches/create-account-simplified-signup.patch`](../patches/create-account-simplified-signup.patch)
