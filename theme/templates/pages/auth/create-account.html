@@ -1,0 +1,105 @@
+{{inject 'passwordRequirements' settings.password_requirements}}
+{{#partial "page"}}
+    {{> components/common/breadcrumbs breadcrumbs=breadcrumbs}}
+    <h1 class="page-heading">{{lang 'create_account.heading' }}</h1>
+
+    <div class="account account--fixed">
+        <div class="account-body">
+            {{#if forms.create_account.error}}
+                {{> components/common/alert-error forms.create_account.error}}
+            {{/if}}
+            {{#if settings.account_creation_enabled}}
+                {{!--
+                    SIMPLIFIED SIGNUP (email + password only)
+                    ----------------------------------------
+                    Only Email, Password and Confirm Password are shown (see <style> below).
+                    First/Last name are hidden and auto-filled from the email address because
+                    BigCommerce hard-requires them on the customer record; the real name is
+                    captured at checkout and overwrites the placeholder.
+
+                    IMPORTANT: this template change is only half of the job. Any OTHER field
+                    that is still marked "Required" in Settings > Account Signup Form
+                    (Company, Phone, and every Address field) must be set to NOT required
+                    there (uncheck "Required" - do NOT try to delete the field). A hidden,
+                    empty, still-required field silently blocks the form on the client AND is
+                    rejected by the server. Fields that are already optional need no change.
+                --}}
+                <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form simplified-signup">
+                    <div class="form-row form-row--half">
+                        {{#each forms.create_account.account_fields }}
+                            {{{dynamicComponent 'components/common/forms'}}}
+                        {{/each}}
+                        {{#each forms.create_account.address_fields }}
+                            {{{dynamicComponent 'components/common/forms'}}}
+                        {{/each}}
+                        {{inject 'required' (lang 'common.required')}}
+                        {{inject 'state_error' (lang 'errors.state_error')}}
+                    </div>
+                    {{{ forms.create_account.recaptcha.markup}}}
+                    <div class="form-actions">
+                        <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" />
+                    </div>
+                </form>
+
+                {{!-- Show only email + password; hide every other field on this form. --}}
+                <style>
+                    .simplified-signup .form-field { display: none; }
+                    .simplified-signup .form-field[data-type="EmailAddress"],
+                    .simplified-signup .form-field[data-type="Password"],
+                    .simplified-signup .form-field[data-type="ConfirmPassword"] { display: block; }
+                </style>
+
+                {{!--
+                    Auto-fill the hidden, system-required name fields so the form validates.
+                    Vanilla JS (no jQuery dependency) so it runs without rebuilding the JS
+                    bundle. If your storefront enforces a strict script-src CSP, move this
+                    logic into assets/js/theme/auth.js instead (see docs/simplified-signup.md).
+                --}}
+                <script>
+                    (function () {
+                        function ready(fn) {
+                            if (document.readyState !== 'loading') { fn(); return; }
+                            document.addEventListener('DOMContentLoaded', fn);
+                        }
+                        ready(function () {
+                            var form = document.querySelector('[data-create-account-form]');
+                            if (!form) { return; }
+
+                            var email = form.querySelector('[data-field-type="EmailAddress"]');
+                            var first = form.querySelector('[data-field-type="FirstName"]');
+                            var last = form.querySelector('[data-field-type="LastName"]');
+                            if (!first && !last) { return; } // name not on this form
+
+                            // Placeholders used until a real name is captured at checkout.
+                            // Change these two strings if you prefer different defaults.
+                            var DEFAULT_FIRST = 'Collector';
+                            var DEFAULT_LAST = 'Member';
+
+                            function titleCase(s) {
+                                return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+                            }
+                            function deriveFromEmail() {
+                                var local = (email && email.value) ? email.value.split('@')[0] : '';
+                                var parts = local.split(/[._+\-]+/).filter(Boolean).map(titleCase);
+                                if (first) { first.value = parts[0] || DEFAULT_FIRST; }
+                                if (last) { last.value = parts.length > 1 ? parts[parts.length - 1] : DEFAULT_LAST; }
+                            }
+
+                            deriveFromEmail();
+                            if (email) {
+                                email.addEventListener('input', deriveFromEmail);
+                                email.addEventListener('blur', deriveFromEmail);
+                            }
+                            // Safety net: guarantee non-empty values before the validator runs.
+                            form.addEventListener('submit', function () {
+                                if (first && !first.value) { first.value = DEFAULT_FIRST; }
+                                if (last && !last.value) { last.value = DEFAULT_LAST; }
+                            }, true);
+                        });
+                    }());
+                </script>
+            {{/if}}
+        </div>
+    </div>
+{{/partial}}
+{{> layout/base}}
