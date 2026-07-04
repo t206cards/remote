@@ -1,33 +1,26 @@
 # t206cards
 
-Working repo for t206cards.com (BigCommerce · Supermarket 7.4 Stencil theme).
+Working repo for t206cards.com (BigCommerce · Supermarket Stencil theme).
 
-## Simplified signup
+## Simplified signup ✅ live
 
-Reduce account signup to **email + password** so collectors can start tracking collections
-without a checkout-length form. Name and billing/shipping are collected at checkout and can be
-added by the customer anytime.
+Collectors can create an account with just **email + password** — no address, and they're
+logged in automatically afterward. Implemented as a custom form that posts to a Cloudflare
+Worker (the native BigCommerce form requires a locked, full address that couldn't be worked
+around in-theme).
 
-👉 **[docs/simplified-signup.md](docs/simplified-signup.md)** — full write-up, deploy + test
-steps, and rollback.
+- **`theme/templates/pages/auth/create-account.html`** — the live signup form (email +
+  password + Turnstile) that posts to the Worker.
+- **`worker/`** — the Cloudflare Worker: creates the customer via the BigCommerce Customers API
+  (no address) and logs them in via the Customer Login SSO API. Setup/deploy in
+  [`worker/README.md`](worker/README.md).
+- **`docs/simplified-signup.md`** — architecture, the operational runbook, and why the simpler
+  in-theme approaches don't work (so they aren't re-attempted).
 
-### What's here
-
-- **`theme/templates/pages/auth/create-account.html`** — modified signup template (no
-  JavaScript; the storefront's CSP blocks inline scripts).
-- **`patches/create-account-simplified-signup.patch`** — the same change as a patch.
-
-### The short version (confirmed by testing on the store)
-
-The name and Address fields are **locked as required** ("not configurable"), and the storefront
-**blocks inline scripts**, so the fix uses **no JavaScript**:
-
-1. **Theme:** show only **Email + Password + Confirm** (inline CSS), and **remove the address
-   block** from the template so no address is submitted.
-2. **Admin:** in **Settings → Account Signup Form → Account Signup Fields**, give **First Name**
-   and **Last Name** a **Default Value** (e.g. `Collector` / `Member`). A hidden field still
-   submits its default, so the required check passes — no script needed. Real name is captured
-   at checkout.
-
-If the store rejects an addressless signup even with the address block removed, the clean
-fallback is a custom API-based registration (details in the doc).
+### At a glance
+```
+create-account form ──POST──▶ Cloudflare Worker ──▶ BigCommerce API (create customer, no address)
+                                                └──▶ SSO login redirect ──▶ shopper logged in
+```
+Cloudflare Turnstile protects the endpoint; no placeholder data is stored on the customer or
+leaks into checkout.

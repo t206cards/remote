@@ -1,33 +1,35 @@
-{{inject 'passwordRequirements' settings.password_requirements}}
+{{!-- Simplified email + password signup. Posts to the Cloudflare Worker (worker/README.md),
+      which creates the BigCommerce customer via the API (no address) and logs the shopper in
+      via the Customer Login SSO API. Cloudflare Turnstile guards the endpoint. This replaces the
+      native form because the store's Account Signup Form requires a full, locked address and the
+      storefront CSP blocks the in-theme workarounds. See docs/simplified-signup.md. --}}
 {{#partial "page"}}
     {{> components/common/breadcrumbs breadcrumbs=breadcrumbs}}
     <h1 class="page-heading">{{lang 'create_account.heading' }}</h1>
 
     <div class="account account--fixed">
         <div class="account-body">
-            {{#if forms.create_account.error}}
-                {{> components/common/alert-error forms.create_account.error}}
-            {{/if}}
             {{#if settings.account_creation_enabled}}
-                {{!-- Simplified signup: keep the full form so the submit button renders. Only Email/Password/Confirm come from account_fields; the address block (name, company, phone, address) is kept in the DOM but hidden with an inline style attribute, because this store's CSP blocks inline style blocks but allows style attributes. Hidden required fields still submit, so give each a Default Value in Settings > Account Signup Form. See docs/simplified-signup.md. --}}
-                <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form simplified-signup">
-                    <div class="form-row form-row--half">
-                        {{#each forms.create_account.account_fields }}
-                            {{{dynamicComponent 'components/common/forms'}}}
-                        {{/each}}
-                        <div style="display:none !important;" aria-hidden="true">
-                            {{#each forms.create_account.address_fields }}
-                                {{{dynamicComponent 'components/common/forms'}}}
-                            {{/each}}
-                        </div>
-                        {{inject 'required' (lang 'common.required')}}
-                        {{inject 'state_error' (lang 'errors.state_error')}}
+                <form action="https://t206-signup.t206cards.workers.dev/register" method="post" class="form" autocomplete="on">
+                    <div class="form-field">
+                        <label class="form-label" for="ca_email">Email Address <small>Required</small></label>
+                        <input type="email" id="ca_email" name="email" class="form-input" required autocomplete="email">
                     </div>
-                    {{{ forms.create_account.recaptcha.markup}}}
+                    <div class="form-field">
+                        <label class="form-label" for="ca_password">Password <small>Required</small></label>
+                        <input type="password" id="ca_password" name="password" class="form-input" required autocomplete="new-password">
+                        <p class="form-field-description">At least 7 characters with an uppercase letter, a number, and a special character.</p>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="ca_password_confirm">Confirm Password <small>Required</small></label>
+                        <input type="password" id="ca_password_confirm" name="password_confirm" class="form-input" required autocomplete="new-password">
+                    </div>
+                    <div class="cf-turnstile" data-sitekey="0x4AAAAAADvrDtUkcgCPo3Xa" style="margin-bottom:1rem;"></div>
                     <div class="form-actions">
-                        <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" />
+                        <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}">
                     </div>
                 </form>
+                <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
             {{/if}}
         </div>
     </div>
