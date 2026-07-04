@@ -1,0 +1,31 @@
+name = "t206-signup"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# ── RECOMMENDED: run the Worker on the store's own domain (same origin) ──
+# This avoids any CSP `form-action` problem because the theme form posts to a
+# relative path on t206cards.com. Requires the t206cards.com zone to be on
+# Cloudflare (proxied / "orange cloud"). Uncomment and deploy:
+#
+# routes = [
+#   { pattern = "t206cards.com/account/register", zone_name = "t206cards.com" }
+# ]
+#
+# If the domain is NOT on Cloudflare, leave routes commented and the Worker will
+# serve at https://t206-signup.<your-subdomain>.workers.dev/register — then the
+# theme form must post to that full URL, and the store's CSP `form-action` must
+# allow challenges/that origin (see README).
+
+# ── Non-secret config ──
+[vars]
+STORE_HASH = "2781s2b091"          # confirm in Settings → API, or the s-XXXX in your CDN URLs
+STORE_URL = "https://t206cards.com" # no trailing slash
+CHANNEL_ID = "1"
+DEFAULT_FIRST_NAME = "Collector"
+DEFAULT_LAST_NAME = "Member"
+
+# ── Secrets — DO NOT put values here. Set them with wrangler:
+#   wrangler secret put BC_TOKEN
+#   wrangler secret put BC_CLIENT_ID
+#   wrangler secret put BC_CLIENT_SECRET
+#   wrangler secret put TURNSTILE_SECRET   # optional (bot protection)
