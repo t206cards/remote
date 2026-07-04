@@ -1,7 +1,9 @@
 {{!-- Custom email + password signup that posts to the Cloudflare Worker (see worker/README.md).
       The Worker creates the customer via the API (no address) and logs them in.
-      Set the form action to match your deploy: "/account/register" for the same-origin
-      Cloudflare route, or the full https://...workers.dev/register URL otherwise. --}}
+      DNS is on BigCommerce (not Cloudflare), so set the action to your Worker's
+      workers.dev URL, e.g. https://t206-signup.YOURSUB.workers.dev/register.
+      NOTE: this is a cross-origin POST; it only works if the store's CSP has no
+      restrictive form-action directive (verify before relying on it). --}}
 {{#partial "page"}}
     {{> components/common/breadcrumbs breadcrumbs=breadcrumbs}}
     <h1 class="page-heading">{{lang 'create_account.heading' }}</h1>
@@ -9,7 +11,7 @@
     <div class="account account--fixed">
         <div class="account-body">
             {{#if settings.account_creation_enabled}}
-                <form action="/account/register" method="post" class="form" autocomplete="on">
+                <form action="https://t206-signup.YOURSUB.workers.dev/register" method="post" class="form" autocomplete="on">
                     <div class="form-field">
                         <label class="form-label" for="ca_email">Email Address <small>Required</small></label>
                         <input type="email" id="ca_email" name="email" class="form-input" required autocomplete="email">
