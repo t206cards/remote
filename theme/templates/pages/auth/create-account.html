@@ -9,15 +9,17 @@
                 {{> components/common/alert-error forms.create_account.error}}
             {{/if}}
             {{#if settings.account_creation_enabled}}
-                {{!-- Simplified signup: keep the whole original form intact so the submit button renders; just hide all fields except email and password. See docs/simplified-signup.md. --}}
+                {{!-- Simplified signup: keep the full form so the submit button renders. Only Email/Password/Confirm come from account_fields; the address block (name, company, phone, address) is kept in the DOM but hidden with an inline style attribute, because this store's CSP blocks inline style blocks but allows style attributes. Hidden required fields still submit, so give each a Default Value in Settings > Account Signup Form. See docs/simplified-signup.md. --}}
                 <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form simplified-signup">
                     <div class="form-row form-row--half">
                         {{#each forms.create_account.account_fields }}
                             {{{dynamicComponent 'components/common/forms'}}}
                         {{/each}}
-                        {{#each forms.create_account.address_fields }}
-                            {{{dynamicComponent 'components/common/forms'}}}
-                        {{/each}}
+                        <div style="display:none !important;" aria-hidden="true">
+                            {{#each forms.create_account.address_fields }}
+                                {{{dynamicComponent 'components/common/forms'}}}
+                            {{/each}}
+                        </div>
                         {{inject 'required' (lang 'common.required')}}
                         {{inject 'state_error' (lang 'errors.state_error')}}
                     </div>
@@ -26,14 +28,6 @@
                         <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" />
                     </div>
                 </form>
-
-                {{!-- Hide every field except Email, Password and Confirm Password. --}}
-                <style>
-                    .simplified-signup .form-field { display: none !important; }
-                    .simplified-signup .form-field[data-type="EmailAddress"],
-                    .simplified-signup .form-field[data-type="Password"],
-                    .simplified-signup .form-field[data-type="ConfirmPassword"] { display: block !important; }
-                </style>
             {{/if}}
         </div>
     </div>
