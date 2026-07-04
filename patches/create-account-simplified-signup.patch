@@ -1,83 +1,40 @@
 --- a/templates/pages/auth/create-account.html
 +++ b/templates/pages/auth/create-account.html
-@@ -9,22 +9,75 @@
+@@ -9,7 +9,22 @@
                  {{> components/common/alert-error forms.create_account.error}}
              {{/if}}
              {{#if settings.account_creation_enabled}}
 -                <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form">
 +                {{!--
-+                    SIMPLIFIED SIGNUP (email + password only) -- NO JAVASCRIPT
-+                    =========================================================
-+                    The storefront's Content-Security-Policy blocks inline scripts (inline
-+                    <style> and inline style="" attributes still apply), so everything here is
-+                    markup + CSS only.
++                    SIMPLIFIED SIGNUP (email + password only)
++                    -----------------------------------------
++                    IMPORTANT: keep the ENTIRE original form below, including BOTH the
++                    account_fields AND address_fields loops. Removing the address_fields loop
++                    made BigCommerce stop rendering the <form> and the submit button entirely
++                    (confirmed via page source), which no CSS could fix. So instead of removing
++                    fields, we keep them all and HIDE everything except Email / Password /
++                    Confirm Password with the inline <style> at the bottom (CSP blocks inline
++                    JS, but inline <style> is allowed).
 +
-+                      * ADDRESS: the address_fields loop is NOT rendered, so no address is
-+                        submitted. (If the store rejects an addressless signup, that needs a
-+                        custom API registration instead.)
-+                      * NAME: First/Last name render as part of account_fields and are hidden
-+                        with CSS below; the required check is satisfied by a DEFAULT VALUE set
-+                        in the admin (Settings > Account Signup Form > Account Signup Fields >
-+                        First Name / Last Name > "Default Value", e.g. "Collector" / "Member").
-+                        A hidden field still submits its default value.
-+                      * COMPANY / PHONE: hidden below (give them a Default Value if required).
-+
-+                    SUBMIT BUTTON: an earlier build hid the button and CSS-only <style> fixes
-+                    kept failing (a theme rule of unknown origin was winning the cascade). The
-+                    button markup is always in the DOM, so it is now force-shown with INLINE
-+                    style="" !important declarations directly on .form-actions and the submit
-+                    input. Inline !important beats any theme selector rule (highest cascade
-+                    precedence), so no upstream rule can hide, clip, collapse, float, or move
-+                    it off-screen. Validated in headless Chromium against every CSS hide vector
-+                    (display/visibility/opacity/height/overflow/position/transform/clip/clip-path),
-+                    including high-specificity !important rules: 24/24 revealed the button.
-+                    The <style> block below is a secondary layer (hides name fields, contains
-+                    floats, de-floats the reCAPTCHA).
++                    The hidden First/Last name (and any required address fields) are still
++                    submitted, so each one that is required must be given a "Default Value" in
++                    Settings > Account Signup Form so the server-side "required" check passes.
 +                --}}
 +                <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form simplified-signup">
                      <div class="form-row form-row--half">
                          {{#each forms.create_account.account_fields }}
                              {{{dynamicComponent 'components/common/forms'}}}
-                         {{/each}}
--                        {{#each forms.create_account.address_fields }}
--                            {{{dynamicComponent 'components/common/forms'}}}
--                        {{/each}}
-+                        {{!-- Address block intentionally NOT rendered for simplified signup. --}}
-                         {{inject 'required' (lang 'common.required')}}
-                         {{inject 'state_error' (lang 'errors.state_error')}}
-                     </div>
-                     {{{ forms.create_account.recaptcha.markup}}}
--                    <div class="form-actions">
--                        <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" />
-+                    <div class="form-actions" style="display:block !important;visibility:visible !important;opacity:1 !important;position:static !important;float:none !important;clear:both !important;height:auto !important;max-height:none !important;min-height:0 !important;overflow:visible !important;transform:none !important;clip:auto !important;clip-path:none !important;width:100% !important;margin-top:1.5rem;">
-+                        <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" style="display:inline-block !important;visibility:visible !important;opacity:1 !important;position:static !important;left:auto !important;top:auto !important;transform:none !important;clip:auto !important;clip-path:none !important;pointer-events:auto !important;height:auto !important;" />
+@@ -25,6 +40,14 @@
+                         <input type="submit" class="button button--primary" value="{{lang 'forms.create_account.submit_value' }}" />
                      </div>
                  </form>
 +
++                {{!-- Hide every field except Email, Password and Confirm Password. --}}
 +                <style>
-+                    /* --- Show only Email + Password + Confirm; hide name / company / phone. --- */
-+                    .simplified-signup .form-field[data-type="FirstName"],
-+                    .simplified-signup .form-field[data-type="LastName"],
-+                    .simplified-signup .form-field[data-type="CompanyName"],
-+                    .simplified-signup .form-field[data-type="Phone"] { display: none !important; }
-+
-+                    /* Give the form a block-formatting context and de-float its contents so
-+                       nothing floated can overlap the actions area (secondary safety net; the
-+                       inline styles on the button are the primary guarantee). */
-+                    .simplified-signup { display: flow-root; }
-+                    .simplified-signup::after { content: ""; display: table; clear: both; }
-+                    .simplified-signup .form-row--half > .form-field {
-+                        float: none !important;
-+                        width: 100% !important;
-+                        clear: both !important;
-+                    }
-+                    .simplified-signup .g-recaptcha,
-+                    .simplified-signup [class*="recaptcha"],
-+                    .simplified-signup iframe[src*="recaptcha"] {
-+                        float: none !important;
-+                        clear: both !important;
-+                        position: relative !important;
-+                    }
++                    .simplified-signup .form-field { display: none !important; }
++                    .simplified-signup .form-field[data-type="EmailAddress"],
++                    .simplified-signup .form-field[data-type="Password"],
++                    .simplified-signup .form-field[data-type="ConfirmPassword"] { display: block !important; }
 +                </style>
              {{/if}}
          </div>

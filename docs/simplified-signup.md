@@ -26,21 +26,20 @@ Two parts — a theme edit and one admin setting:
 
 ### A. Theme edit — [`theme/templates/pages/auth/create-account.html`](../theme/templates/pages/auth/create-account.html)
 
-- Shows **only Email, Password, Confirm Password** (inline `<style>`, which is allowed).
-- **Removes the `address_fields` loop entirely** (pure Handlebars), so no address is submitted.
-- Hides First/Last name (and Company/Phone) — they still submit their **Default Value** (below).
-- **Force-shows the Create Account button.** In testing, a theme rule of unknown origin was
-  hiding the submit button once the form was simplified, and CSS-only `<style>` fixes kept
-  losing the cascade. The button is now force-shown with **inline `style="…!important"`
-  declarations directly on `.form-actions` and the submit `<input>`. Inline `!important` has the
-  highest cascade precedence, so no theme rule (even high-specificity `!important`) can hide,
-  clip, collapse, float, or move it off-screen. This was validated in headless Chromium against
-  every CSS hide vector (display / visibility / opacity / height+overflow / position /
-  transform / clip / clip-path), including high-specificity `!important` rules — 24/24 revealed
-  the button. A `<style>` block adds a secondary safety layer (float containment, de-floated
-  reCAPTCHA).
-- No `<script>`, so the store's CSP can't break it (inline `style=""` attributes are allowed —
-  the theme itself uses them).
+The edit is intentionally tiny — it is the **byte-for-byte original template** plus a
+`simplified-signup` class on the `<form>` and one inline `<style>` block. Nothing structural is
+removed.
+
+- **Keeps the entire original form**, including BOTH the `account_fields` and `address_fields`
+  loops. This matters: an earlier version that *removed* the `address_fields` loop caused
+  BigCommerce to stop rendering the `<form>` and the submit button entirely (confirmed by
+  viewing the page source — the whole form wrapper was absent, which is why no CSS could bring
+  the button back). Keeping the loop keeps the form — and the button — rendering.
+- **Hides every field except Email / Password / Confirm Password** with CSS
+  (`.simplified-signup .form-field { display:none }`, then re-show the three by `data-type`).
+- The hidden fields are still **submitted**, so each hidden field that is **required** must be
+  given a **Default Value** in the admin (section B) so the server-side check passes.
+- No `<script>` (the storefront CSP blocks inline JS; inline `<style>` is allowed).
 
 Patch to apply on the machine with the full theme:
 [`patches/create-account-simplified-signup.patch`](../patches/create-account-simplified-signup.patch)
