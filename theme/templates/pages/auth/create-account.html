@@ -45,12 +45,24 @@
                     </div>
                 </form>
 
-                {{!-- Show only Email + Password + Confirm; hide name / company / phone. --}}
                 <style>
+                    /* Show only Email + Password + Confirm; hide name / company / phone. */
                     .simplified-signup .form-field[data-type="FirstName"],
                     .simplified-signup .form-field[data-type="LastName"],
                     .simplified-signup .form-field[data-type="CompanyName"],
                     .simplified-signup .form-field[data-type="Phone"] { display: none !important; }
+
+                    /* The theme arranges fields in a floated two-column grid whose row
+                       breaks are keyed on :nth-child. Because :nth-child still counts the
+                       hidden fields, hiding them scrambles the float clearing and the submit
+                       button can vanish. Stack the remaining fields full-width so there are
+                       no floats left uncleared and the Create Account button always renders. */
+                    .simplified-signup .form-row--half > .form-field {
+                        float: none !important;
+                        width: 100% !important;
+                        clear: none !important;
+                    }
+                    .simplified-signup .form-actions { clear: both; }
                 </style>
             {{/if}}
         </div>

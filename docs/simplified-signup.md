@@ -29,6 +29,10 @@ Two parts — a theme edit and one admin setting:
 - Shows **only Email, Password, Confirm Password** (inline CSS, which is allowed).
 - **Removes the `address_fields` loop entirely** (pure Handlebars), so no address is submitted.
 - Hides First/Last name (and Company/Phone) — they still submit their **Default Value** (below).
+- **Stacks the visible fields full-width.** The theme's default layout floats fields in a
+  two-column grid whose row breaks are keyed on `:nth-child`, which keeps counting the hidden
+  fields — that scrambles the float clearing and makes the *Create Account* button disappear.
+  The CSS neutralizes the float grid for this form so the button always renders.
 - No `<script>`, so the store's CSP can't break it.
 
 Patch to apply on the machine with the full theme:
