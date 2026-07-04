@@ -8,25 +8,30 @@ Reduce account signup to **email + password** so collectors can start tracking c
 without a checkout-length form. Name and billing/shipping are collected at checkout and can be
 added by the customer anytime.
 
-👉 **[docs/simplified-signup.md](docs/simplified-signup.md)** — full write-up, exact steps,
-test checklist, and rollback.
+👉 **[docs/simplified-signup.md](docs/simplified-signup.md)** — full write-up, deploy + test
+steps, tradeoffs, and rollback.
 
 ### What's here
 
-- **`theme/templates/pages/auth/create-account.html`** — modified signup template: shows only
-  Email + Password + Confirm Password, and auto-fills the hidden, system-required First/Last
-  name from the email (real name captured at checkout).
+- **`theme/templates/pages/auth/create-account.html`** — modified signup template.
 - **`patches/create-account-simplified-signup.patch`** — the same change as a patch to
   `git apply` on the machine with the full theme.
 
-### It takes two coordinated changes
+### The short version
 
-1. **Theme** (in this repo): hide everything but email/password; auto-fill the name fields
-   BigCommerce won't let you make optional.
-2. **Admin** (one-time): in **Settings → Account Signup Form**, set the remaining fields
-   (Company, Phone, all Address fields) to **not required** — *uncheck "Required"*, which is
-   different from *deleting* the field (deletion is the wall you hit before).
+BigCommerce **locks the name and Address fields as required** ("This value is not
+configurable"), because the Address fields are shared with checkout — so this **can't** be
+fixed in the admin, and must be handled in the theme. The template:
 
-Why both: the form is config-driven, and a hidden field that is still "required" silently
-blocks submission. First/Last name are system-locked, so the theme auto-fills them; everything
-else gets un-required in admin. Details and a CSP-safe bundled variant are in the doc.
+1. Shows only **Email + Password + Confirm**.
+2. Hides and auto-fills the required **First/Last name** from the email (real name captured at
+   checkout).
+3. Handles the required **address block** via one flag, `SUBMIT_PLACEHOLDER_ADDRESS`:
+   - **`false` (default):** removes the address block — no address submitted. Clean, *if* your
+     store lets an account save without one. **Test this first** (safe: create + delete a
+     throwaway account).
+   - **`true`:** keeps it hidden and auto-fills placeholder values so signup always submits
+     (creates a placeholder address the customer replaces at checkout).
+
+For true email+password signup with **zero** placeholder data, the doc also describes a custom
+API-based registration alternative.

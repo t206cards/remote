@@ -11,27 +11,31 @@
             {{#if settings.account_creation_enabled}}
                 {{!--
                     SIMPLIFIED SIGNUP (email + password only)
-                    ----------------------------------------
-                    Only Email, Password and Confirm Password are shown (see <style> below).
-                    First/Last name are hidden and auto-filled from the email address because
-                    BigCommerce hard-requires them on the customer record; the real name is
-                    captured at checkout and overwrites the placeholder.
+                    ========================================
+                    BigCommerce locks the built-in name and Address fields as "Required"
+                    ("This value is not configurable" in Settings > Account Signup Form),
+                    because the Address fields are shared with checkout and the address book.
+                    They therefore CANNOT be made optional in the admin -- the theme has to
+                    handle them. This template:
 
-                    IMPORTANT: this template change is only half of the job. Any OTHER field
-                    that is still marked "Required" in Settings > Account Signup Form
-                    (Company, Phone, and every Address field) must be set to NOT required
-                    there (uncheck "Required" - do NOT try to delete the field). A hidden,
-                    empty, still-required field silently blocks the form on the client AND is
-                    rejected by the server. Fields that are already optional need no change.
+                      * Shows only Email, Password and Confirm Password (see the style block).
+                      * Hides + auto-fills the required First/Last name from the email
+                        (real name is captured at checkout and overwrites the placeholder).
+                      * Wraps the Address block in [data-address-fields-block] so the script
+                        can either REMOVE it (no address submitted) or KEEP it hidden and
+                        auto-fill placeholder values -- controlled by SUBMIT_PLACEHOLDER_ADDRESS
+                        in the script below. See docs/simplified-signup.md.
                 --}}
                 <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form simplified-signup">
                     <div class="form-row form-row--half">
                         {{#each forms.create_account.account_fields }}
                             {{{dynamicComponent 'components/common/forms'}}}
                         {{/each}}
-                        {{#each forms.create_account.address_fields }}
-                            {{{dynamicComponent 'components/common/forms'}}}
-                        {{/each}}
+                        <div data-address-fields-block>
+                            {{#each forms.create_account.address_fields }}
+                                {{{dynamicComponent 'components/common/forms'}}}
+                            {{/each}}
+                        </div>
                         {{inject 'required' (lang 'common.required')}}
                         {{inject 'state_error' (lang 'errors.state_error')}}
                     </div>
@@ -41,60 +45,93 @@
                     </div>
                 </form>
 
-                {{!-- Show only email + password; hide every other field on this form. --}}
+                {{!-- Show only Email + Password; hide the name fields and the address block. --}}
                 <style>
-                    .simplified-signup .form-field { display: none; }
-                    .simplified-signup .form-field[data-type="EmailAddress"],
-                    .simplified-signup .form-field[data-type="Password"],
-                    .simplified-signup .form-field[data-type="ConfirmPassword"] { display: block; }
+                    .simplified-signup .form-field[data-type="FirstName"],
+                    .simplified-signup .form-field[data-type="LastName"],
+                    .simplified-signup .form-field[data-type="CompanyName"],
+                    .simplified-signup .form-field[data-type="Phone"],
+                    .simplified-signup [data-address-fields-block] { display: none !important; }
                 </style>
 
-                {{!--
-                    Auto-fill the hidden, system-required name fields so the form validates.
-                    Vanilla JS (no jQuery dependency) so it runs without rebuilding the JS
-                    bundle. If your storefront enforces a strict script-src CSP, move this
-                    logic into assets/js/theme/auth.js instead (see docs/simplified-signup.md).
-                --}}
                 <script>
                     (function () {
+                        // ----------------------------------------------------------------
+                        // false  = REMOVE the address block entirely (nothing submitted).
+                        //          Try this first. If signup then fails with an
+                        //          "address is required" error, switch to true.
+                        // true   = keep the address block hidden and auto-fill placeholder
+                        //          values so the form always submits (creates a placeholder
+                        //          address the customer replaces at checkout).
+                        // ----------------------------------------------------------------
+                        var SUBMIT_PLACEHOLDER_ADDRESS = false;
+
+                        // Placeholders used until real details are captured at checkout.
+                        var DEFAULT_FIRST = 'Collector';
+                        var DEFAULT_LAST = 'Member';
+                        var DEFAULT_TEXT = 'N/A';
+                        var TYPE_PLACEHOLDER = { Zip: '00000', Phone: '0000000000' };
+                        var HIDDEN_ACCOUNT_TYPES = ['CompanyName', 'Phone'];
+
+                        var form = document.querySelector('[data-create-account-form]');
+                        if (!form) { return; }
+
+                        function each(list, fn) { Array.prototype.slice.call(list || []).forEach(fn); }
+                        function titleCase(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+                        // In REMOVE mode, drop the whole address block up front (synchronously,
+                        // before the theme's validator runs) so it is neither validated nor sent.
+                        if (!SUBMIT_PLACEHOLDER_ADDRESS) {
+                            each(form.querySelectorAll('[data-address-fields-block]'), function (el) { el.remove(); });
+                        }
+
+                        function deriveNames() {
+                            var email = form.querySelector('[data-field-type="EmailAddress"]');
+                            var local = (email && email.value) ? email.value.split('@')[0] : '';
+                            var parts = local.split(/[._+\-]+/).filter(Boolean).map(titleCase);
+                            var first = parts[0] || DEFAULT_FIRST;
+                            var last = parts.length > 1 ? parts[parts.length - 1] : DEFAULT_LAST;
+                            each(form.querySelectorAll('[data-field-type="FirstName"]'), function (i) { i.value = first; });
+                            each(form.querySelectorAll('[data-field-type="LastName"]'), function (i) { i.value = last; });
+                        }
+
+                        function fillRequiredHidden(input) {
+                            if (input.getAttribute('aria-required') !== 'true' || input.value) { return; }
+                            if (input.tagName === 'SELECT') {
+                                for (var k = 0; k < input.options.length; k++) {
+                                    if (input.options[k].value) { input.value = input.options[k].value; break; }
+                                }
+                            } else {
+                                var type = input.getAttribute('data-field-type');
+                                input.value = TYPE_PLACEHOLDER[type] || DEFAULT_TEXT;
+                            }
+                        }
+
+                        function fillAll() {
+                            deriveNames();
+                            each(form.querySelectorAll('[data-field-type]'), function (input) {
+                                var type = input.getAttribute('data-field-type');
+                                if (type === 'FirstName' || type === 'LastName') { return; } // handled above
+                                var inBlock = input.closest && input.closest('[data-address-fields-block]');
+                                if (HIDDEN_ACCOUNT_TYPES.indexOf(type) !== -1 || (SUBMIT_PLACEHOLDER_ADDRESS && inBlock)) {
+                                    fillRequiredHidden(input);
+                                }
+                            });
+                        }
+
                         function ready(fn) {
                             if (document.readyState !== 'loading') { fn(); return; }
                             document.addEventListener('DOMContentLoaded', fn);
                         }
                         ready(function () {
-                            var form = document.querySelector('[data-create-account-form]');
-                            if (!form) { return; }
-
+                            fillAll();
                             var email = form.querySelector('[data-field-type="EmailAddress"]');
-                            var first = form.querySelector('[data-field-type="FirstName"]');
-                            var last = form.querySelector('[data-field-type="LastName"]');
-                            if (!first && !last) { return; } // name not on this form
-
-                            // Placeholders used until a real name is captured at checkout.
-                            // Change these two strings if you prefer different defaults.
-                            var DEFAULT_FIRST = 'Collector';
-                            var DEFAULT_LAST = 'Member';
-
-                            function titleCase(s) {
-                                return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-                            }
-                            function deriveFromEmail() {
-                                var local = (email && email.value) ? email.value.split('@')[0] : '';
-                                var parts = local.split(/[._+\-]+/).filter(Boolean).map(titleCase);
-                                if (first) { first.value = parts[0] || DEFAULT_FIRST; }
-                                if (last) { last.value = parts.length > 1 ? parts[parts.length - 1] : DEFAULT_LAST; }
-                            }
-
-                            deriveFromEmail();
                             if (email) {
-                                email.addEventListener('input', deriveFromEmail);
-                                email.addEventListener('blur', deriveFromEmail);
+                                email.addEventListener('input', deriveNames);
+                                email.addEventListener('blur', deriveNames);
                             }
-                            // Safety net: guarantee non-empty values before the validator runs.
-                            form.addEventListener('submit', function () {
-                                if (first && !first.value) { first.value = DEFAULT_FIRST; }
-                                if (last && !last.value) { last.value = DEFAULT_LAST; }
-                            }, true);
+                            // Safety net: guarantee non-empty values right before the validator runs.
+                            form.addEventListener('submit', fillAll, true);
                         });
                     }());
                 </script>

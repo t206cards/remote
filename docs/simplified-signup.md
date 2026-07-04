@@ -8,198 +8,132 @@ tracking collections immediately. Name and billing/shipping are collected at che
 
 ---
 
-## TL;DR
+## The key constraint (confirmed on the store)
 
-Getting to email + password takes **two coordinated changes** — the theme edit alone is not
-enough, and the admin change alone is not enough:
+BigCommerce **locks the built-in name and Address fields as required** — in
+**Settings → Account Signup Form → Address Fields**, editing e.g. *Address Line 1* shows
+**"Required: This value is not configurable."** These Address fields are **shared with
+checkout and the address book**, so BigCommerce won't let you make them optional (an address
+isn't usable without a street/city/zip).
 
-1. **Theme edit** (done in this repo): `templates/pages/auth/create-account.html` now shows
-   only **Email, Password, Confirm Password**. First/Last name are hidden and auto-filled
-   from the email, because BigCommerce hard-requires them on the customer record.
-2. **Admin edit** (you do this once): in **Settings → Account Signup Form**, set every other
-   still-required field — **Company, Phone, and all Address fields** — to **not required**.
-   This means *unchecking "Required"*, which is **different from deleting the field** (deleting
-   is what's blocked, and is probably what was tried before).
+**Consequences:**
+- You **cannot** fix this from the admin by un-requiring fields. (An earlier draft of this
+  doc said you could — that was wrong for this store.)
+- The theme change **does not** make the admin setting configurable either. The requirement
+  has to be **satisfied or bypassed in the theme**.
+- First/Last name are also system-required and can't be removed.
 
-Why both are required: the signup form is **config-driven**. The theme loops over whatever
-fields the Account Signup Form defines, and the theme's own validator
-(`assets/js/theme/common/form-validation.js`) adds a "required" check for every field the
-config marks required. A field that is hidden **but still required** silently blocks the form
-on the client *and* is rejected by the server. So:
-
-- Fields you **can** un-require in admin (Company, Phone, Address, custom) → un-require them.
-- Fields you **can't** un-require (First/Last name are system-locked) → the theme hides and
-  auto-fills them.
+So the create-account template has to (a) show only email + password, (b) satisfy the
+required name fields itself, and (c) deal with the required address block one of two ways.
 
 ---
 
-## Why signup is heavy today (what I found in the theme)
+## What I changed (in this repo)
 
-`templates/pages/auth/create-account.html` renders the form by looping over the signup config:
-
-```handlebars
-{{#each forms.create_account.account_fields }}{{{dynamicComponent 'components/common/forms'}}}{{/each}}
-{{#each forms.create_account.address_fields }}{{{dynamicComponent 'components/common/forms'}}}{{/each}}
-```
-
-- `account_fields` = First Name, Last Name, Company, Phone, Email, Password, Confirm Password
-  (+ any custom fields).
-- `address_fields` = Address 1/2, City, State/Province, Zip, Country (+ any custom address
-  fields).
-
-Every one of those that is marked **Required** in the admin becomes a required input. That
-whole address block being required is what makes signup feel like a checkout.
-
-Each field wrapper carries a stable identifier: `data-type="<FieldType>"` on the
-`.form-field`, and `data-field-type="<FieldType>"` on the input — e.g. `EmailAddress`,
-`Password`, `ConfirmPassword`, `FirstName`, `LastName`, `AddressLine1`, `Country`, `State`.
-The theme change targets fields by these identifiers.
-
----
-
-## The theme change (already applied in this repo)
-
-- **Modified file:** [`theme/templates/pages/auth/create-account.html`](../theme/templates/pages/auth/create-account.html)
-- **Patch (apply on the machine with the full theme):**
+- **Modified template:** [`theme/templates/pages/auth/create-account.html`](../theme/templates/pages/auth/create-account.html)
+- **Patch to apply on the machine with the full theme:**
   [`patches/create-account-simplified-signup.patch`](../patches/create-account-simplified-signup.patch)
 
-What it does:
+The template now:
 
-1. Adds a `simplified-signup` class to the form and a scoped `<style>` that shows **only**
-   `EmailAddress`, `Password`, and `ConfirmPassword` and hides everything else on the form.
-2. Adds a small **vanilla-JS** `<script>` (no jQuery dependency, so it runs without rebuilding
-   the JS bundle) that auto-fills the hidden First/Last name from the email address:
-   - `john.smith@…` → First: `John`, Last: `Smith`
-   - `justin@…` → First: `Justin`, Last: `Member` (placeholder)
-   - Placeholders are two constants (`DEFAULT_FIRST` / `DEFAULT_LAST`) you can change.
-   - The real name is captured at checkout and overwrites the placeholder.
-3. Leaves the address loop in place but hidden. Once the address fields are **not required**
-   (admin step below), they post empty and **no address record is created** — no junk data.
-4. Keeps the reCAPTCHA markup and the submit button untouched.
+1. Shows **only Email, Password, Confirm Password** (scoped CSS).
+2. Hides and **auto-fills the required First/Last name from the email** (`john.smith@…` →
+   John / Smith; `justin@…` → Justin / Member placeholder). Real name is captured at checkout
+   and overwrites it. Constants `DEFAULT_FIRST` / `DEFAULT_LAST` are editable.
+3. Wraps the address block in `[data-address-fields-block]` and handles it via a single flag,
+   `SUBMIT_PLACEHOLDER_ADDRESS`, at the top of the inline script:
 
-Apply it:
+| Mode | `SUBMIT_PLACEHOLDER_ADDRESS` | What happens | Data impact |
+|------|------------------------------|--------------|-------------|
+| **Remove** (default) | `false` | The whole address block is removed from the form, so **no address is submitted**. | None — clean, **if** your store lets an account save without an address. |
+| **Placeholder** (fallback) | `true` | Address fields stay hidden and are **auto-filled** with placeholder values so the form always submits. | Creates a placeholder address on each new customer (see tradeoff below). |
 
-```bash
-# from the root of your Supermarket theme working copy
-git apply /path/to/patches/create-account-simplified-signup.patch
-# or just copy theme/templates/pages/auth/create-account.html over your file
-stencil push        # or: stencil bundle && upload the theme
-```
-
-No JS bundle rebuild is needed because the style/script are inline in the template.
+Everything is inline (vanilla JS/CSS) so **no JS bundle rebuild is required**.
 
 ---
 
-## The required admin step (the other half)
+## Deploy + the one test that decides the mode
 
-**Settings → Account Signup Form** (older UI: *Advanced Settings → Account Signup Form*).
+BigCommerce's storefront may or may not accept account creation with no address at all. I
+couldn't verify that against your live store from here, so **test it — it's safe and
+reversible** (just create and then delete a throwaway account):
 
-For each of these, click the field and **uncheck "This field is required"**, then **Save**:
-
-- **Address fields:** Address Line 1, Address Line 2, Suburb/City, Country, State/Province,
-  Zip/Postcode
-- **Optional account fields:** Company, Phone
-- **Any custom fields** you added to signup
-
-Leave **Email, Password, Confirm Password, First Name, Last Name** as-is (system-required).
-
-> Do **not** try to *delete* these fields — deletion is blocked, which is the wall you hit
-> before. *Un-requiring* them is allowed for every non-system field, and that's all we need:
-> the theme hides them, and once they're optional the form submits with just email + password.
-
-If a field is already optional, leave it — no change needed.
-
----
-
-## Test checklist (before/after deploying)
-
-- [ ] Create Account page shows only Email, Password, Confirm Password.
-- [ ] Signing up with only email + password **succeeds** (no "required field" errors).
-- [ ] New customer appears in admin with an email-derived / placeholder name.
-- [ ] Login and the account dashboard work for the new customer.
-- [ ] Field validation still works: invalid email, weak password, and password mismatch all
-      still show errors.
-- [ ] reCAPTCHA still appears (if enabled for your store).
-- [ ] Checkout as the new customer: real name + shipping/billing address are captured, and
-      the placeholder name is overwritten.
-- [ ] Existing customers are unaffected.
+1. Apply the change and push the theme:
+   ```bash
+   git apply /path/to/patches/create-account-simplified-signup.patch   # or copy the file over
+   stencil push
+   ```
+   (Ships in **Remove mode** by default.)
+2. Go to the Create Account page (incognito) — you should see only Email + Password + Confirm.
+3. Sign up with a throwaway email + password.
+   - **If the account is created** → you're done. Clean email+password signup, **no junk
+     data**. Delete the test account.
+   - **If you get an "Address is required"-type error** → open the template, set
+     `SUBMIT_PLACEHOLDER_ADDRESS = true`, push again, and re-test. Signup will now succeed with
+     a hidden placeholder address.
 
 ---
 
-## Rollback
+## Tradeoff of Placeholder mode (read before shipping it)
 
-- Reverse the patch: `git apply -R patches/create-account-simplified-signup.patch` (or restore
-  your original `create-account.html`) and `stencil push`.
-- Re-check "Required" on the admin fields you changed.
+If you have to use Placeholder mode, every new account gets a placeholder address
+(e.g. `N/A, N/A, <state>, <country>, 00000`) as its default address. Implications:
+
+- Collectors who only track collections and never buy: harmless — they never see it.
+- Collectors who later buy: at checkout the placeholder pre-fills the shipping form, so they
+  must **overwrite it** with a real address. There's a small risk a careless shopper checks
+  out against the placeholder → a bad/undeliverable order. Mitigate with a checkout note or an
+  account-dashboard "add your real address" prompt.
+
+If that risk isn't acceptable and Remove mode doesn't work on your store, use the clean
+alternative below.
+
+---
+
+## Clean, zero-junk alternative: custom API registration
+
+If you want true email+password signup with **no placeholder data** and Remove mode isn't
+accepted by the storefront, build a small custom registration instead of using the native
+`save_new_account` form:
+
+- A minimal email+password form that creates the customer via the **Customers V3 API**
+  (`POST /v3/customers`, which requires only `first_name`, `last_name`, `email` — **no
+  address**) with a placeholder name + generated password, or via the Storefront **Customer
+  Accounts / GraphQL** registration + login mutations.
+- This bypasses the native form's required-address validation entirely, so nothing fake is
+  ever stored.
+- It's a real build (a backend endpoint or app, email verification, and bot protection), so
+  it's the right choice only if the in-theme options above don't meet your bar. I can scope
+  and build this if you want it.
 
 ---
 
 ## Optional: CSP-safe / bundled-asset version
 
 The inline script works on a default BigCommerce storefront. If you enforce a **strict
-`script-src` Content-Security-Policy** (inline scripts blocked), move the logic into the
-bundled JS instead:
-
-In `assets/js/theme/auth.js`, add a method and call it from `onReady()` when the create
-account form is present (right after `this.registerCreateAccountValidator($createAccountForm)`):
-
-```js
-simplifyCreateAccount($form) {
-    $form.addClass('simplified-signup');
-    const $email = $('[data-field-type="EmailAddress"]', $form);
-    const $first = $('[data-field-type="FirstName"]', $form);
-    const $last = $('[data-field-type="LastName"]', $form);
-    if (!$first.length && !$last.length) return;
-
-    const DEFAULT_FIRST = 'Collector';
-    const DEFAULT_LAST = 'Member';
-    const titleCase = s => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-    const derive = () => {
-        const local = ($email.val() || '').split('@')[0];
-        const parts = local.split(/[._+\-]+/).filter(Boolean).map(titleCase);
-        if ($first.length) $first.val(parts[0] || DEFAULT_FIRST);
-        if ($last.length) $last.val(parts.length > 1 ? parts[parts.length - 1] : DEFAULT_LAST);
-    };
-    derive();
-    $email.on('input blur', derive);
-    $form.on('submit', () => {
-        if ($first.length && !$first.val()) $first.val(DEFAULT_FIRST);
-        if ($last.length && !$last.val()) $last.val(DEFAULT_LAST);
-    });
-}
-```
-
-And move the CSS into your theme SCSS (e.g. a custom partial under `assets/scss/`):
-
-```scss
-.simplified-signup {
-    .form-field { display: none; }
-    .form-field[data-type="EmailAddress"],
-    .form-field[data-type="Password"],
-    .form-field[data-type="ConfirmPassword"] { display: block; }
-}
-```
-
-Then remove the inline `<style>`/`<script>` from the template and rebuild the bundle
-(`stencil bundle`).
+`script-src` Content-Security-Policy**, move the same logic into `assets/js/theme/auth.js`
+(call it from `onReady()` when the create-account form is present) and the CSS into your theme
+SCSS, then rebuild the bundle (`stencil bundle`). The logic is identical to the inline block;
+ask if you want it pre-split into those files.
 
 ---
 
-## Fallback: only if an address field's "Required" cannot be unchecked
+## Test checklist
 
-On a standard store all non-system fields can be un-required, so you shouldn't need this. If
-your configuration locks an address field as required, you have two options:
+- [ ] Create Account page shows only Email, Password, Confirm Password.
+- [ ] Signing up with only email + password succeeds (no "required field" errors).
+- [ ] New customer appears in admin with an email-derived / placeholder name.
+- [ ] (Placeholder mode) the customer's default address is the placeholder, not blank/broken.
+- [ ] Login and the account dashboard work.
+- [ ] Validation still works: invalid email, weak password, password mismatch all show errors.
+- [ ] reCAPTCHA still appears (if enabled).
+- [ ] Checkout as the new customer: real name + address captured; placeholder overwritten.
+- [ ] Existing customers unaffected.
 
-- **Recommended — custom API registration:** build a small email+password form that creates
-  the customer via the Customer Accounts / Customers V3 API with minimal placeholder name and
-  a generated password. This bypasses the native form's required-field validation entirely and
-  avoids saving any placeholder address. It's a real build (backend endpoint, email
-  verification, bot protection) but it's the clean way to fully decouple signup from the
-  address requirement.
-- **Quick but dirty — auto-fill placeholder address:** extend the script to fill the hidden
-  required address inputs with placeholder values so the form submits. **This saves a fake
-  address on every customer that will appear in their address book at checkout**, so only use
-  it as a stop-gap. If you want this variant, say so and I'll provide it.
+## Rollback
+
+- Reverse the patch (`git apply -R …`) or restore the original `create-account.html`, then
+  `stencil push`. No admin changes were made, so there's nothing to undo there.
 
 ---
 
@@ -207,37 +141,32 @@ your configuration locks an address field as required, you have two options:
 
 Independently of the form, make sure the account wall isn't blocking purchases:
 
-- **Settings → Checkout** → allow **guest checkout** (rather than "accounts required"), and
-  optionally **create a customer account after checkout** so guests still get an account with
-  their real name/address already filled — without ever seeing the signup form.
-
-This pairs well with the simplified signup: buyers can check out friction-free, and the
-signup page is used mainly by collectors who just want to track a collection.
+- **Settings → Checkout** → allow **guest checkout**, and optionally **create a customer
+  account after checkout** so guests still get an account with their real name/address already
+  filled — without ever seeing the signup form. This pairs well with simplified signup and
+  also sidesteps the placeholder-address issue for buyers.
 
 ---
 
 ## Cross-cutting things to handle
 
 - **Checkout still collects name + billing/shipping**, so simplified signup costs buyers
-  nothing. The placeholder name is overwritten with the real one at checkout.
-- **"Add later" already exists**: logged-in customers can edit their name and add addresses
-  anytime under **Account → Addresses** / account settings. Consider a gentle dashboard prompt
-  ("Add your shipping address to check out faster").
-- **Klaviyo personalization**: new profiles will carry the placeholder/email-derived name
-  until checkout. Audit flows/templates that greet by name and add fallbacks, e.g.
-  `Hi {{ first_name|default:'there' }}`. Names captured at checkout sync back and fill the
-  profile.
+  nothing; the placeholder name (and, in Placeholder mode, address) is overwritten there.
+- **"Add later" already exists**: logged-in customers can edit their name and addresses under
+  **Account → Addresses**. Consider a gentle dashboard prompt.
+- **Klaviyo personalization**: new profiles carry the placeholder/email-derived name until
+  checkout. Add fallbacks in flows/templates, e.g. `Hi {{ first_name|default:'there' }}`.
 - **Existing customers**: unaffected — this only changes the new-signup experience.
-- **Marketing consent**: keep any newsletter/marketing opt-in checkbox on signup if you want
-  it; it's independent of the address fields.
+- **Marketing consent**: keep any newsletter opt-in on signup if you want it; it's independent
+  of these fields.
 
 ---
 
 ## Sources
 
 - [Editing Form Fields — BigCommerce Help](https://support.bigcommerce.com/s/article/Editing-Form-Fields?language=en_US)
-- [Remove address fields from account signup form (community thread)](https://support.bigcommerce.com/s/question/0D51B00005V5XoySAF/i-want-to-remove-address-fields-from-account-signup-form-on-my-store?language=en_US)
-- [First & last name required when creating account (community thread)](https://support.bigcommerce.com/s/question/0D54O00006YZ2D8SAL/first-last-name-required-when-creating-account?language=en_US)
-- [Create Customers — Customers V3 API (first_name, last_name, email required)](https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/customers/v3/create-customers)
+- [Account creation without address (community)](https://support.bigcommerce.com/s/question/0D54O00006ESBCcSAP/account-creation-without-address?language=en_US)
+- [Is it possible to not require an address on Account Creation? (community)](https://support.bigcommerce.com/s/question/0D51B000044g977SAA/is-it-possible-to-not-require-an-adress-on-account-creation?language=en_US)
+- [Address fields to be set as not required during account creation (community)](https://support.bigcommerce.com/s/question/0D51B00004SvEYGSA3/address-fields-to-be-set-as-not-required-during-account-creation?language=en_US)
+- [Create Customers — Customers V3 API (first_name, last_name, email required; address separate)](https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/customers/v3/create-customers)
 - [Modifying Forms — Stencil themes (Developer Center)](https://developer.bigcommerce.com/docs/storefront/stencil/themes/templates/login)
-- [Passwordless Customer Login (Developer Center)](https://developer.bigcommerce.com/docs/start/authentication/passwordless)
