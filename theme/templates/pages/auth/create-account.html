@@ -9,21 +9,7 @@
                 {{> components/common/alert-error forms.create_account.error}}
             {{/if}}
             {{#if settings.account_creation_enabled}}
-                {{!--
-                    SIMPLIFIED SIGNUP (email + password only)
-                    -----------------------------------------
-                    IMPORTANT: keep the ENTIRE original form below, including BOTH the
-                    account_fields AND address_fields loops. Removing the address_fields loop
-                    made BigCommerce stop rendering the <form> and the submit button entirely
-                    (confirmed via page source), which no CSS could fix. So instead of removing
-                    fields, we keep them all and HIDE everything except Email / Password /
-                    Confirm Password with the inline <style> at the bottom (CSP blocks inline
-                    JS, but inline <style> is allowed).
-
-                    The hidden First/Last name (and any required address fields) are still
-                    submitted, so each one that is required must be given a "Default Value" in
-                    Settings > Account Signup Form so the server-side "required" check passes.
-                --}}
+                {{!-- Simplified signup: keep the whole original form intact so the submit button renders; just hide all fields except email and password. See docs/simplified-signup.md. --}}
                 <form action="{{urls.auth.save_new_account}}" data-create-account-form method="post" class="form simplified-signup">
                     <div class="form-row form-row--half">
                         {{#each forms.create_account.account_fields }}
